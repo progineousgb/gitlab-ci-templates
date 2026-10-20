@@ -1,0 +1,18 @@
+include:
+  - project: pro-gineous-group/gitlab-ci-templates
+    ref: main
+    file: templates/wordpress-deploy.yml
+
+stages: [deploy]
+
+deploy:theme:
+  extends: .pg-wordpress-deploy
+  variables:
+    WP_PATH: /var/www/example.com
+    WP_TYPE: themes
+    WP_SLUG: example-theme
+    WP_FLUSH_CACHE: "true"
+  environment:
+    name: production
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

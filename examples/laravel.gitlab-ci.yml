@@ -1,0 +1,22 @@
+include:
+  - project: pro-gineous-group/gitlab-ci-templates
+    ref: main
+    file: templates/laravel-deploy.yml
+  - project: pro-gineous-group/gitlab-ci-templates
+    ref: main
+    file: templates/lint.yml
+
+stages: [test, deploy]
+
+deploy:
+  extends: .pg-laravel-deploy
+  variables:
+    DEPLOY_PATH: /var/www/app
+    PHP_BIN: php8.3
+    PHP_FPM_RELOAD: sudo systemctl reload php8.3-fpm
+  environment:
+    name: production
+    url: https://app.example.com
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual

@@ -1,0 +1,4 @@
+include:
+  - local: templates/lint.yml
+
+stages: [test]

@@ -1,0 +1,15 @@
+include:
+  - project: pro-gineous-group/gitlab-ci-templates
+    ref: main
+    file: templates/compose-ssh.yml
+
+stages: [deploy]
+
+deploy:
+  extends: .pg-compose-ssh
+  variables:
+    DEPLOY_PATH: /opt/myapp
+  environment:
+    name: production
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

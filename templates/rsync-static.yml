@@ -1,0 +1,26 @@
+# Deploy a built static site with rsync over SSH.
+# Variables: see README.md#rsync-staticyml
+
+variables:
+  STATIC_DIR: public
+  DEPLOY_PORT: "22"
+  RSYNC_EXTRA_ARGS: ""
+
+.pg-rsync-static:
+  image: alpine:3.24
+  stage: deploy
+  resource_group: $CI_ENVIRONMENT_NAME
+  before_script:
+    - apk add --no-cache openssh-client rsync
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+    - eval "$(ssh-agent -s)"
+    - chmod 400 "$SSH_PRIVATE_KEY"
+    - ssh-add "$SSH_PRIVATE_KEY"
+  script:
+    - test -d "$STATIC_DIR" || { echo "STATIC_DIR '$STATIC_DIR' not found, did the build job pass artifacts?"; exit 1; }
+    # Trailing slash on the source copies the contents, not the folder itself.
+    - >
+      rsync -az --delete --delay-updates $RSYNC_EXTRA_ARGS
+      -e "ssh -p $DEPLOY_PORT"
+      "$STATIC_DIR/" "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"

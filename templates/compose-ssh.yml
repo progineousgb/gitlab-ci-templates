@@ -1,0 +1,37 @@
+# Deploy a Docker Compose app on a remote host over SSH.
+# Variables: see README.md#compose-sshyml
+
+variables:
+  DEPLOY_PORT: "22"
+  COMPOSE_FILE_NAME: compose.yaml
+  COMPOSE_REGISTRY_LOGIN: "false"
+
+.pg-compose-ssh:
+  image: alpine:3.24
+  stage: deploy
+  resource_group: $CI_ENVIRONMENT_NAME
+  before_script:
+    - apk add --no-cache openssh-client rsync
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+    - eval "$(ssh-agent -s)"
+    - chmod 400 "$SSH_PRIVATE_KEY"
+    - ssh-add "$SSH_PRIVATE_KEY"
+  script:
+    # .env is left alone on the server; it holds the real secrets.
+    - >
+      rsync -az --exclude .git --exclude .env
+      -e "ssh -p $DEPLOY_PORT"
+      ./ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"
+    # Password goes over stdin so it never shows up in the remote process list.
+    - |
+      if [ "$COMPOSE_REGISTRY_LOGIN" = "true" ]; then
+        printf '%s' "$REGISTRY_PASSWORD" | ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+          "docker login -u '$REGISTRY_USER' --password-stdin '$CI_REGISTRY'"
+      fi
+    - >
+      ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST"
+      "cd '$DEPLOY_PATH' &&
+      docker compose -f '$COMPOSE_FILE_NAME' pull &&
+      docker compose -f '$COMPOSE_FILE_NAME' up -d --remove-orphans &&
+      docker image prune -f"

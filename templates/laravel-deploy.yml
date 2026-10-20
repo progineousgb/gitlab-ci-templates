@@ -1,0 +1,53 @@
+# Zero-downtime-ish Laravel deploy: upload to a new release directory,
+# install dependencies on the server, migrate, then switch a symlink.
+# Server layout:
+#   $DEPLOY_PATH/releases/<sha>/
+#   $DEPLOY_PATH/shared/.env
+#   $DEPLOY_PATH/shared/storage/
+#   $DEPLOY_PATH/current -> releases/<sha>
+# Point the web server at $DEPLOY_PATH/current/public.
+# Variables: see README.md#laravel-deployyml
+
+variables:
+  DEPLOY_PORT: "22"
+  KEEP_RELEASES: "5"
+  PHP_BIN: php
+  COMPOSER_BIN: composer
+  RUN_MIGRATIONS: "true"
+  PHP_FPM_RELOAD: ""
+
+.pg-laravel-deploy:
+  image: alpine:3.24
+  stage: deploy
+  resource_group: $CI_ENVIRONMENT_NAME
+  before_script:
+    - apk add --no-cache openssh-client rsync
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+    - eval "$(ssh-agent -s)"
+    - chmod 400 "$SSH_PRIVATE_KEY"
+    - ssh-add "$SSH_PRIVATE_KEY"
+  script:
+    - RELEASE="$DEPLOY_PATH/releases/$CI_COMMIT_SHORT_SHA"
+    - SSH="ssh -p $DEPLOY_PORT $DEPLOY_USER@$DEPLOY_HOST"
+    - $SSH "mkdir -p '$RELEASE' '$DEPLOY_PATH/shared/storage' && test -f '$DEPLOY_PATH/shared/.env'"
+    - >
+      rsync -az --exclude .git --exclude .env --exclude storage --exclude node_modules --exclude vendor
+      -e "ssh -p $DEPLOY_PORT" ./ "$DEPLOY_USER@$DEPLOY_HOST:$RELEASE/"
+    - |
+      $SSH sh -e <<REMOTE
+      cd '$RELEASE'
+      ln -sfn '$DEPLOY_PATH/shared/.env' .env
+      if [ ! -d '$DEPLOY_PATH/shared/storage/framework' ]; then cp -a storage/. '$DEPLOY_PATH/shared/storage/' 2>/dev/null || true; fi
+      rm -rf storage && ln -sfn '$DEPLOY_PATH/shared/storage' storage
+      mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs
+      $COMPOSER_BIN install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+      if [ '$RUN_MIGRATIONS' = 'true' ]; then $PHP_BIN artisan migrate --force; fi
+      $PHP_BIN artisan config:cache
+      $PHP_BIN artisan route:cache
+      $PHP_BIN artisan view:cache
+      ln -sfn '$RELEASE' '$DEPLOY_PATH/current.tmp' && mv -T '$DEPLOY_PATH/current.tmp' '$DEPLOY_PATH/current'
+      $PHP_BIN '$DEPLOY_PATH/current/artisan' queue:restart || true
+      if [ -n '$PHP_FPM_RELOAD' ]; then $PHP_FPM_RELOAD; fi
+      cd '$DEPLOY_PATH/releases' && ls -1t | tail -n +\$(( $KEEP_RELEASES + 1 )) | xargs -r rm -rf
+      REMOTE

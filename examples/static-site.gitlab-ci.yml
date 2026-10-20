@@ -1,0 +1,25 @@
+include:
+  - project: pro-gineous-group/gitlab-ci-templates
+    ref: main
+    file: templates/rsync-static.yml
+
+stages: [build, deploy]
+
+build:
+  stage: build
+  image: node:26-alpine
+  script:
+    - npm ci
+    - npm run build
+  artifacts:
+    paths: [dist/]
+
+deploy:
+  extends: .pg-rsync-static
+  variables:
+    STATIC_DIR: dist
+  environment:
+    name: production
+    url: https://www.example.com
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

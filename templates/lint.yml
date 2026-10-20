@@ -1,0 +1,45 @@
+# Lint jobs: shellcheck for shell scripts, yamllint for YAML.
+# Both run on merge requests and the default branch.
+
+variables:
+  SHELLCHECK_OPTS: ""
+  YAMLLINT_CONFIG: "{extends: default, rules: {line-length: {max: 160}, document-start: disable, truthy: {check-keys: false}}}"
+
+.pg-lint-rules:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+shellcheck:
+  extends: .pg-lint-rules
+  stage: test
+  image: koalaman/shellcheck-alpine:v0.11.0
+  script:
+    - apk add --no-cache git
+    # Files ending in .sh/.bash plus anything with a sh/bash shebang.
+    - |
+      git ls-files > /tmp/files
+      : > /tmp/scripts
+      while IFS= read -r f; do
+        [ -f "$f" ] || continue
+        case "$f" in
+          *.sh|*.bash) echo "$f" >> /tmp/scripts ;;
+          *) head -n1 "$f" | grep -Eq '^#!.*/(env )?(ba|da)?sh' && echo "$f" >> /tmp/scripts ;;
+        esac
+      done < /tmp/files
+      if [ ! -s /tmp/scripts ]; then echo "no shell scripts found"; exit 0; fi
+      cat /tmp/scripts
+      tr '\n' '\0' < /tmp/scripts | xargs -0 shellcheck $SHELLCHECK_OPTS
+
+yamllint:
+  extends: .pg-lint-rules
+  stage: test
+  image: python:3.15-alpine
+  script:
+    - pip install --quiet yamllint
+    - |
+      if [ -f .yamllint ] || [ -f .yamllint.yml ] || [ -f .yamllint.yaml ]; then
+        yamllint .
+      else
+        yamllint -d "$YAMLLINT_CONFIG" .
+      fi

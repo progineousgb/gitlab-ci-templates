@@ -1,0 +1,31 @@
+# Deploy one WordPress theme or plugin directory with rsync over SSH.
+# Variables: see README.md#wordpress-deployyml
+
+variables:
+  DEPLOY_PORT: "22"
+  WP_SOURCE_DIR: "."
+  WP_FLUSH_CACHE: "false"
+
+.pg-wordpress-deploy:
+  image: alpine:3.24
+  stage: deploy
+  resource_group: $CI_ENVIRONMENT_NAME
+  before_script:
+    - apk add --no-cache openssh-client rsync
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+    - eval "$(ssh-agent -s)"
+    - chmod 400 "$SSH_PRIVATE_KEY"
+    - ssh-add "$SSH_PRIVATE_KEY"
+  script:
+    - case "$WP_TYPE" in themes|plugins) ;; *) echo "WP_TYPE must be 'themes' or 'plugins'"; exit 1;; esac
+    - TARGET="$WP_PATH/wp-content/$WP_TYPE/$WP_SLUG"
+    - >
+      rsync -az --delete --delay-updates
+      --exclude .git --exclude .gitlab-ci.yml --exclude node_modules --exclude tests --exclude '.env*'
+      -e "ssh -p $DEPLOY_PORT"
+      "$WP_SOURCE_DIR/" "$DEPLOY_USER@$DEPLOY_HOST:$TARGET/"
+    - |
+      if [ "$WP_FLUSH_CACHE" = "true" ]; then
+        ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "wp --path='$WP_PATH' cache flush"
+      fi
