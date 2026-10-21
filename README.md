@@ -84,17 +84,17 @@ The repository is synced to `DEPLOY_PATH` without `.git` and `.env`. Keep the re
 | `PHP_BIN` | `php` | For example `php8.3` on servers with several versions. |
 | `COMPOSER_BIN` | `composer` | Composer must be installed on the server. |
 | `RUN_MIGRATIONS` | `true` | Runs `artisan migrate --force`. |
-| `KEEP_RELEASES` | `5` | Older release directories are deleted. |
+| `KEEP_RELEASES` | `5` | How many releases to keep. Releases are named `<pipeline IID>-<short sha>` and ordered by the pipeline IID, not by file time. Older ones are deleted; the release `current` points to is always kept. |
 | `PHP_FPM_RELOAD` | empty | Command to reload PHP-FPM so OPcache picks up the new path, e.g. `sudo systemctl reload php8.3-fpm`. Needs a matching sudoers rule. |
 
-Before the first deploy, create `$DEPLOY_PATH/shared/.env` by hand. The job fails if it is missing. Point the web server at `$DEPLOY_PATH/current/public`.
+Before the first deploy, create `$DEPLOY_PATH/shared/.env` by hand. The job fails if it is missing. Point the web server at `$DEPLOY_PATH/current/public`. Deploy variables that end up on the server (`DEPLOY_PATH`, `WP_PATH`, and similar) must not contain a single quote; the job stops if one does.
 
 Frontend assets: build them in an earlier job and pass `public/build` as an artifact. The deploy job uploads whatever is in the working tree.
 
 Rolling back is a symlink change:
 
 ```bash
-ln -sfn /var/www/app/releases/<old-sha> /var/www/app/current
+ln -sfn /var/www/app/releases/<old-release> /var/www/app/current
 ```
 
 Migrations are not rolled back by that, so write them to be backwards compatible.

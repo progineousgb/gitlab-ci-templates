@@ -18,6 +18,11 @@ variables:
     - chmod 400 "$SSH_PRIVATE_KEY"
     - ssh-add "$SSH_PRIVATE_KEY"
   script:
+    # Values are placed inside single quotes on the server, so they must not contain one.
+    - |
+      for v in "$DEPLOY_PATH" "$COMPOSE_FILE_NAME" "$REGISTRY_USER"; do
+        case "$v" in *"'"*) echo "deploy variables must not contain a single quote"; exit 1;; esac
+      done
     # .env is left alone on the server; it holds the real secrets.
     - >
       rsync -az --exclude .git --exclude .env

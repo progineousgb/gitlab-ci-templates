@@ -18,6 +18,11 @@ variables:
     - chmod 400 "$SSH_PRIVATE_KEY"
     - ssh-add "$SSH_PRIVATE_KEY"
   script:
+    # Values are placed inside single quotes on the server, so they must not contain one.
+    - |
+      for v in "$WP_PATH" "$WP_SLUG"; do
+        case "$v" in *"'"*) echo "deploy variables must not contain a single quote"; exit 1;; esac
+      done
     - case "$WP_TYPE" in themes|plugins) ;; *) echo "WP_TYPE must be 'themes' or 'plugins'"; exit 1;; esac
     - TARGET="$WP_PATH/wp-content/$WP_TYPE/$WP_SLUG"
     - >
